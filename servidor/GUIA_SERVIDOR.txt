@@ -1,0 +1,27 @@
+CONECTAR EL JUEGO A LA PAGINA DE ESTADISTICAS (una sola vez, unos 10 minutos)
+=========================================================================
+
+Que hace: cada pelea ONLINE se manda sola a una base de datos gratis (Supabase). La pagina lee de
+ahi el winrate, el pickrate y quien mainea a cada personaje. Las peleas contra la IA no cuentan.
+Si los dos jugadores reportan una pelea, el servidor la junta en una sola; si no coinciden en el
+ganador, esa pelea no cuenta.
+
+1. Entra a https://supabase.com y crea una cuenta (puedes entrar con tu GitHub).
+2. "New project": nombre rift-fighters, region "East US" (la mas cercana a Mexico).
+   Te pide una contraseña de la base de datos: guardala tu, no se la des a nadie (no se usa en el juego).
+3. Cuando el proyecto este listo: menu de la izquierda > "SQL Editor" > "New query".
+   Abre supabase_setup.sql (esta en esta carpeta), copia TODO, pegalo y dale "Run".
+   Debe decir "Success".
+4. Menu de la izquierda > "Project Settings" > "API" (o "API Keys").
+   Copia la "Project URL" y la clave "anon public" (o "publishable").
+   NO uses la "service_role" / "secret": esa da control total y nunca va en el juego.
+5. Con el juego cerrado, abre configurar_servidor.bat (esta en esta carpeta) y pega la URL y la clave.
+   Eso crea rf_servidor.json en la carpeta del juego y configura la pagina.
+6. Abre RiftFighters.exe, escribe tu apodo y dale Guardar. Juega una pelea online.
+7. Abre rf_motor\pagina\index.html: debe decir "En vivo" y mostrar la pelea.
+
+Para que la vea todo el mundo, la pagina se sube a GitHub Pages cuando exista el repositorio.
+
+Privacidad: solo se manda el apodo que cada quien escribe en el lanzador (nunca el nombre de
+Windows), los personajes, el lado y el ganador. En el lanzador se puede desactivar
+"Compartir mis partidas online".

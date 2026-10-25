@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rift Fighters - Estadisticas</title>
+<script src="config.js"></script>
+<style>
+:root{--bg:#070b1e;--panel:#0f1838;--line:#1f2d60;--or:#fda048;--cy:#78d7ff;--tx:#eef3ff;--mu:#8f9bbf;--gn:#6ee696;--rd:#f05a64}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1000px 420px at 80% -10%,#1b2b6c66,transparent),var(--bg);color:var(--tx);font-family:"Segoe UI",system-ui,sans-serif}
+header{padding:28px 20px 10px;max-width:1100px;margin:auto;display:flex;flex-wrap:wrap;gap:16px;align-items:end;justify-content:space-between}
+h1{margin:0;font-size:34px;font-style:italic;letter-spacing:.02em}
+h1 span{color:var(--or)}
+.sub{color:var(--mu);margin-top:4px}
+main{max-width:1100px;margin:auto;padding:10px 20px 40px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0 16px}
+button,.btn{font:inherit;background:#16224e;border:1px solid var(--line);color:var(--tx);padding:9px 14px;border-radius:10px;cursor:pointer}
+button.on{background:var(--or);color:#1a0f02;border-color:var(--or);font-weight:700}
+input[type=search]{font:inherit;background:#0b1230;border:1px solid var(--line);color:var(--tx);padding:9px 12px;border-radius:10px;min-width:220px}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:22px;text-align:center;color:var(--mu);margin-bottom:16px}
+.drop.hot{border-color:var(--or);color:var(--tx)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+.kpi b{display:block;font-size:26px;color:var(--cy)}
+.kpi span{color:var(--mu);font-size:13px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #18244f}
+th{color:var(--mu);font-weight:600;font-size:13px;cursor:pointer;user-select:none}
+tr.row{cursor:pointer} tr.row:hover{background:#16224e}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.meter{height:8px;background:#0a1028;border-radius:6px;overflow:hidden;min-width:80px}
+.meter i{display:block;height:100%}
+.wr-good{color:var(--gn)} .wr-bad{color:var(--rd)}
+.detail{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0}
+.detail h2{margin:0 0 8px;font-size:22px}
+.note{color:var(--mu);font-size:13px;margin-top:10px}
+@media (max-width:640px){h1{font-size:26px} th:nth-child(4),td:nth-child(4){display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>RIFT <span>FIGHTERS</span></h1><div class="sub">Estadisticas de personajes: winrate y pickrate</div></div>
+  <div class="sub" id="src">Sin datos cargados</div>
+</header>
+<main>
+  <div class="drop" id="drop">Arrastra aqui uno o varios archivos <b>rf_partidas.jsonl</b> (estan en la carpeta <b>save</b> del juego)<br>
+    o <label class="btn">elegir archivos<input type="file" id="file" multiple accept=".jsonl,.json,.txt" hidden></label>
+    <button id="demo">ver ejemplo</button></div>
+  <div class="bar">
+    <button id="fOnline" class="on">Solo online</button>
+    <button id="fAll">Todas las partidas</button>
+    <input type="search" id="q" placeholder="Buscar personaje">
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div id="detail"></div>
+  <table>
+    <thead><tr><th data-k="name">Personaje</th><th data-k="games" class="num">Partidas</th><th data-k="pick">Pickrate</th><th data-k="wr">Winrate</th></tr></thead>
+    <tbody id="tb"></tbody>
+  </table>
+  <div class="note">Winrate = peleas ganadas por equipos que llevaban al personaje. Pickrate = porcentaje de todas las elecciones de personaje.
+  Los personajes con menos de 10 partidas se muestran en gris: con tan pocas peleas el numero todavia no dice mucho.</div>
+</main>
+<script>
+let RECS = [], onlyOnline = true, fromServer = false, sortK = 'games', sortDir = -1, sel = null;
+const $ = id => document.getElementById(id);
+function parse(text){ const out=[]; for(const line of text.split(/\r?\n/)){ const t=line.trim(); if(!t) continue; try{ out.push(JSON.parse(t)); }catch(e){} } return out; }
+function keyOf(c){ return (c.char && c.char !== '?') ? c.char : c.name; }
+function compute(){
+  const recs = RECS.filter(r => !onlyOnline || r.online);
+  const ch = {}; let picks = 0;
+  for(const r of recs){
+    for(const side of [1,2]){
+      const team = side===1 ? r.p1 : r.p2; if(!team) continue;
+      const won = r.ganador === side;
+      for(const c of team){
+        const k = keyOf(c); picks++;
+        const o = ch[k] || (ch[k] = {key:k, name:c.name||k, games:0, wins:0, players:{}});
+        o.games++; if(won) o.wins++;
+        const pl = r.jugadores ? r.jugadores[side] : (r.lado === side ? r.jugador : null);
+        if(pl){ const p = o.players[pl] || (o.players[pl]={games:0,wins:0}); p.games++; if(won) p.wins++; }
+        if(false){ const p = o.players[r.jugador] || (o.players[r.jugador]={games:0,wins:0}); p.games++; if(won) p.wins++; }
+      }
+    }
+  }
+  const list = Object.values(ch).map(o => ({...o, wr: o.games ? o.wins/o.games : 0, pick: picks ? o.games/picks : 0}));
+  return {recs, list, picks};
+}
+function pct(x){ return (x*100).toFixed(1) + '%'; }
+function render(){
+  const {recs, list, picks} = compute();
+  const q = $('q').value.trim().toLowerCase();
+  const players = new Set(); recs.forEach(r => { if(r.jugadores){ if(r.jugadores[1]) players.add(r.jugadores[1]); if(r.jugadores[2]) players.add(r.jugadores[2]); } else if(r.jugador) players.add(r.jugador); });
+  $('kpis').innerHTML = [
+    ['Partidas', recs.length], ['Personajes usados', list.length], ['Jugadores', players.size || '-'],
+    ['Mas elegido', list.length ? [...list].sort((a,b)=>b.games-a.games)[0].name : '-']
+  ].map(([a,b]) => `<div class="kpi"><b>${b}</b><span>${a}</span></div>`).join('');
+  const rows = list.filter(o => !q || o.name.toLowerCase().includes(q) || o.key.toLowerCase().includes(q))
+    .sort((a,b) => { const x=a[sortK], y=b[sortK]; return (typeof x==='string' ? x.localeCompare(y) : x-y) * sortDir; });
+  $('tb').innerHTML = rows.map(o => {
+    const few = o.games < 10, col = o.wr >= .55 ? 'wr-good' : (o.wr <= .45 ? 'wr-bad' : '');
+    return `<tr class="row" data-k="${encodeURIComponent(o.key)}" style="${few?'opacity:.5':''}"><td>${esc(o.name)}</td><td class="num">${o.games}</td>
+      <td><div class="meter"><i style="width:${Math.min(100,o.pick*100*8)}%;background:var(--cy)"></i></div> ${pct(o.pick)}</td>
+      <td class="${few?'':col}"><div class="meter"><i style="width:${o.wr*100}%;background:var(--or)"></i></div> ${pct(o.wr)}</td></tr>`;
+  }).join('') || '<tr><td colspan="4" style="color:var(--mu)">Todavia no hay partidas' + (onlyOnline ? ' online' : '') + '.</td></tr>';
+  document.querySelectorAll('tr.row').forEach(tr => tr.onclick = () => { sel = decodeURIComponent(tr.dataset.k); render(); window.scrollTo({top:0,behavior:'smooth'}); });
+  const d = sel && list.find(o => o.key === sel);
+  if(d){
+    const ps = Object.entries(d.players).map(([n,p]) => ({n, ...p, wr: p.wins/p.games}));
+    const mains = [...ps].sort((a,b) => b.games-a.games).slice(0,5);
+    const best = ps.filter(p => p.games >= 5).sort((a,b) => b.wr-a.wr).slice(0,5);
+    const li = arr => arr.length ? arr.map(p => `<li>${esc(p.n)} - ${p.games} partidas, ${pct(p.wr)} de victorias</li>`).join('') : '<li style="color:var(--mu)">Sin datos de jugadores todavia</li>';
+    $('detail').innerHTML = `<div class="detail"><h2>${esc(d.name)}</h2>${d.games} partidas · winrate ${pct(d.wr)} · pickrate ${pct(d.pick)}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:12px">
+      <div><b>Quienes lo mainean</b><ol>${li(mains)}</ol></div><div><b>Quienes son mejores con el</b> (5+ partidas)<ol>${li(best)}</ol></div></div>
+      <button onclick="sel=null;render()">Cerrar</button></div>`;
+  } else $('detail').innerHTML = '';
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+async function loadFiles(files){ let n=0; for(const f of files){ RECS = RECS.concat(parse(await f.text())); n++; } $('src').textContent = RECS.length + ' partidas de ' + n + ' archivo(s)'; render(); }
+$('file').onchange = e => loadFiles(e.target.files);
+const dz = $('drop');
+dz.ondragover = e => { e.preventDefault(); dz.classList.add('hot'); };
+dz.ondragleave = () => dz.classList.remove('hot');
+dz.ondrop = e => { e.preventDefault(); dz.classList.remove('hot'); loadFiles(e.dataTransfer.files); };
+$('fOnline').onclick = () => { onlyOnline = true; $('fOnline').classList.add('on'); $('fAll').classList.remove('on'); render(); };
+$('fAll').onclick = () => { onlyOnline = false; $('fAll').classList.add('on'); $('fOnline').classList.remove('on'); render(); };
+$('q').oninput = render;
+document.querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; sortDir = (sortK===k) ? -sortDir : (k==='name'?1:-1); sortK = k; render(); });
+$('demo').onclick = () => {
+  const chars = ['Goku','Vegeta','Naruto','Sasuke','Ichigo','Luffy','Gojo Satoru','Saitama','Deku','Tanjiro','Crono','Fairy Leviathan'];
+  const players = ['vland','Kaz','Rafa','Mili','Toño','Sora'];
+  let seed = 7; const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
+  const out = [];
+  for(let i=0;i<400;i++){ const a = chars[Math.floor(rnd()**1.4*chars.length)], b = chars[Math.floor(rnd()*chars.length)];
+    const bias = (chars.indexOf(a) - chars.indexOf(b)) * -0.02;
+    out.push({v:1,online:true,lado:1+Math.floor(rnd()*2),jugador:players[Math.floor(rnd()*players.length)],p1:[{char:a,name:a}],p2:[{char:b,name:b}],ganador: rnd() < .5+bias ? 1 : 2}); }
+  RECS = out; $('src').textContent = 'Datos de ejemplo (inventados)'; render();
+};
+async function loadServer(){
+  const c = window.RF_SERVIDOR;
+  if(!c || !c.url || !c.key || c.key.indexOf('PEGA') >= 0) return false;
+  try {
+    const r = await fetch(c.url.replace(/\/$/,'') + '/rest/v1/partidas_publicas?select=*&order=fecha.desc&limit=20000', {headers:{apikey:c.key, Authorization:'Bearer '+c.key}});
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const rows = await r.json();
+    RECS = rows.map(x => ({online:true, p1:x.p1, p2:x.p2, ganador:x.ganador, fecha:x.fecha, jugadores:{1:x.jugador1, 2:x.jugador2}}));
+    fromServer = true;
+    const last = rows.length ? new Date(rows[0].fecha).toLocaleString() : '-';
+    $('src').textContent = 'En vivo: ' + rows.length + ' partidas online · ultima: ' + last;
+    $('drop').style.display = 'none';
+    $('fOnline').style.display = 'none'; $('fAll').style.display = 'none';
+    render(); return true;
+  } catch(e) { $('src').textContent = 'No se pudo leer el servidor (' + e.message + ')'; return false; }
+}
+render();
+loadServer().then(ok => { if(ok) setInterval(loadServer, 60000); });
+</script>
+</body>
+</html>
