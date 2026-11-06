@@ -17,9 +17,14 @@ main{max-width:1100px;margin:auto;padding:10px 20px 40px}
 .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0 16px}
 button,.btn{font:inherit;background:#16224e;border:1px solid var(--line);color:var(--tx);padding:9px 14px;border-radius:10px;cursor:pointer}
 button.on{background:var(--or);color:#1a0f02;border-color:var(--or);font-weight:700}
+select{font:inherit;background:#0b1230;border:1px solid var(--line);color:var(--tx);padding:9px 12px;border-radius:10px}
+.ver{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:20px;background:#1d2b5e;color:var(--cy);white-space:nowrap}
+.ver.ADC{background:#3a2a0e;color:var(--or)} .ver.Grappler{background:#3a1420;color:#ff8a94} .ver.Forms{background:#13304a;color:var(--cy)}
+.ver.Counter{background:#1e3a22;color:var(--gn)} .ver.Combo{background:#2e1c4a;color:#c79bff}
 input[type=search]{font:inherit;background:#0b1230;border:1px solid var(--line);color:var(--tx);padding:9px 12px;border-radius:10px;min-width:220px}
 .drop{border:2px dashed var(--line);border-radius:14px;padding:22px;text-align:center;color:var(--mu);margin-bottom:16px}
 .drop.hot{border-color:var(--or);color:var(--tx)}
+.drop .btn{display:inline-block;margin-top:10px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
 .kpi b{display:block;font-size:26px;color:var(--cy)}
@@ -36,6 +41,7 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .detail h2{margin:0 0 8px;font-size:22px}
 .note{color:var(--mu);font-size:13px;margin-top:10px}
 @media (max-width:640px){h1{font-size:26px} th:nth-child(4),td:nth-child(4){display:none}}
+.mu{color:var(--mu)}
 </style>
 </head>
 <body>
@@ -45,17 +51,17 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 </header>
 <main>
   <div class="drop" id="drop">Arrastra aqui uno o varios archivos <b>rf_partidas.jsonl</b> (estan en la carpeta <b>save</b> del juego)<br>
-    o <label class="btn">elegir archivos<input type="file" id="file" multiple accept=".jsonl,.json,.txt" hidden></label>
-    <button id="demo">ver ejemplo</button></div>
+    o <label class="btn">elegir archivos<input type="file" id="file" multiple accept=".jsonl,.json,.txt" hidden></label></div>
   <div class="bar">
     <button id="fOnline" class="on">Solo online</button>
     <button id="fAll">Todas las partidas</button>
+    <select id="fVer"><option value="">Todas las versiones</option></select>
     <input type="search" id="q" placeholder="Buscar personaje">
   </div>
   <div class="kpis" id="kpis"></div>
   <div id="detail"></div>
   <table>
-    <thead><tr><th data-k="name">Personaje</th><th data-k="games" class="num">Partidas</th><th data-k="pick">Pickrate</th><th data-k="wr">Winrate</th></tr></thead>
+    <thead><tr><th data-k="base">Personaje</th><th data-k="ver">Version</th><th data-k="games" class="num">Partidas</th><th data-k="pick">Pickrate</th><th data-k="wr">Winrate</th></tr></thead>
     <tbody id="tb"></tbody>
   </table>
   <div class="note">Winrate = peleas ganadas por equipos que llevaban al personaje. Pickrate = porcentaje de todas las elecciones de personaje.
@@ -66,6 +72,14 @@ let RECS = [], onlyOnline = true, fromServer = false, sortK = 'games', sortDir =
 const $ = id => document.getElementById(id);
 function parse(text){ const out=[]; for(const line of text.split(/\r?\n/)){ const t=line.trim(); if(!t) continue; try{ out.push(JSON.parse(t)); }catch(e){} } return out; }
 function keyOf(c){ return (c.char && c.char !== '?') ? c.char : c.name; }
+// "Goku Combo Mode" -> base "Goku", version "Combo"
+const VERS = ['ADC','Forms','Grappler','Counter','Combo','Heavy','Rushdown','Omega','Neo','Legacy','Classic','Arcade','Alpha'];
+function splitName(n){
+  const m = String(n||'').match(new RegExp('^(.*?)\\s+((?:[A-Za-z]+\\s+)*?(' + VERS.join('|') + '))\\s+Mode$','i'));
+  if(m) return {base: m[1].trim() || n, ver: m[2].trim()};
+  return {base: String(n||'?'), ver: ''};
+}
+function verClass(v){ const last = v.split(/\s+/).pop(); return VERS.includes(last) ? last : ''; }
 function compute(){
   const recs = RECS.filter(r => !onlyOnline || r.online);
   const ch = {}; let picks = 0;
@@ -75,8 +89,11 @@ function compute(){
       const won = r.ganador === side;
       for(const c of team){
         const k = keyOf(c); picks++;
-        const o = ch[k] || (ch[k] = {key:k, name:c.name||k, games:0, wins:0, players:{}});
+        const sn = splitName(c.name||k);
+        const o = ch[k] || (ch[k] = {key:k, name:c.name||k, base:sn.base, ver:sn.ver, games:0, wins:0, players:{}, vs:{}});
         o.games++; if(won) o.wins++;
+        const opp = side===1 ? r.p2 : r.p1;
+        if(opp && r.ganador){ for(const e of opp){ const ek = keyOf(e); const v = o.vs[ek] || (o.vs[ek] = {name:e.name||ek, games:0, wins:0}); v.games++; if(won) v.wins++; } }
         const pl = r.jugadores ? r.jugadores[side] : (r.lado === side ? r.jugador : null);
         if(pl){ const p = o.players[pl] || (o.players[pl]={games:0,wins:0}); p.games++; if(won) p.wins++; }
         if(false){ const p = o.players[r.jugador] || (o.players[r.jugador]={games:0,wins:0}); p.games++; if(won) p.wins++; }
@@ -93,16 +110,21 @@ function render(){
   const players = new Set(); recs.forEach(r => { if(r.jugadores){ if(r.jugadores[1]) players.add(r.jugadores[1]); if(r.jugadores[2]) players.add(r.jugadores[2]); } else if(r.jugador) players.add(r.jugador); });
   $('kpis').innerHTML = [
     ['Partidas', recs.length], ['Personajes usados', list.length], ['Jugadores', players.size || '-'],
-    ['Mas elegido', list.length ? [...list].sort((a,b)=>b.games-a.games)[0].name : '-']
+    ['Mas elegido', list.length ? esc([...list].sort((a,b)=>b.games-a.games)[0].name) : '-']
   ].map(([a,b]) => `<div class="kpi"><b>${b}</b><span>${a}</span></div>`).join('');
-  const rows = list.filter(o => !q || o.name.toLowerCase().includes(q) || o.key.toLowerCase().includes(q))
+  const fv = $('fVer').value;
+  const vs = [...new Set(list.map(o => verClass(o.ver) || (o.ver ? 'Otras' : 'Sin version')))].sort();
+  const cur = $('fVer').value;
+  $('fVer').innerHTML = '<option value="">Todas las versiones</option>' + vs.map(v => `<option${v===cur?' selected':''}>${esc(v)}</option>`).join('');
+  const verOf = o => verClass(o.ver) || (o.ver ? 'Otras' : 'Sin version');
+  const rows = list.filter(o => (!fv || verOf(o) === fv) && (!q || o.name.toLowerCase().includes(q) || o.key.toLowerCase().includes(q)))
     .sort((a,b) => { const x=a[sortK], y=b[sortK]; return (typeof x==='string' ? x.localeCompare(y) : x-y) * sortDir; });
   $('tb').innerHTML = rows.map(o => {
     const few = o.games < 10, col = o.wr >= .55 ? 'wr-good' : (o.wr <= .45 ? 'wr-bad' : '');
-    return `<tr class="row" data-k="${encodeURIComponent(o.key)}" style="${few?'opacity:.5':''}"><td>${esc(o.name)}</td><td class="num">${o.games}</td>
+    return `<tr class="row" data-k="${encodeURIComponent(o.key)}" style="${few?'opacity:.5':''}"><td>${esc(o.base)}</td><td>${o.ver ? `<span class="ver ${verClass(o.ver)}">${esc(o.ver)}</span>` : '<span class="mu">-</span>'}</td><td class="num">${o.games}</td>
       <td><div class="meter"><i style="width:${Math.min(100,o.pick*100*8)}%;background:var(--cy)"></i></div> ${pct(o.pick)}</td>
       <td class="${few?'':col}"><div class="meter"><i style="width:${o.wr*100}%;background:var(--or)"></i></div> ${pct(o.wr)}</td></tr>`;
-  }).join('') || '<tr><td colspan="4" style="color:var(--mu)">Todavia no hay partidas' + (onlyOnline ? ' online' : '') + '.</td></tr>';
+  }).join('') || '<tr><td colspan="5" style="color:var(--mu)">Todavia no hay partidas' + (onlyOnline ? ' online' : '') + '.</td></tr>';
   document.querySelectorAll('tr.row').forEach(tr => tr.onclick = () => { sel = decodeURIComponent(tr.dataset.k); render(); window.scrollTo({top:0,behavior:'smooth'}); });
   const d = sel && list.find(o => o.key === sel);
   if(d){
@@ -110,9 +132,14 @@ function render(){
     const mains = [...ps].sort((a,b) => b.games-a.games).slice(0,5);
     const best = ps.filter(p => p.games >= 5).sort((a,b) => b.wr-a.wr).slice(0,5);
     const li = arr => arr.length ? arr.map(p => `<li>${esc(p.n)} - ${p.games} partidas, ${pct(p.wr)} de victorias</li>`).join('') : '<li style="color:var(--mu)">Sin datos de jugadores todavia</li>';
-    $('detail').innerHTML = `<div class="detail"><h2>${esc(d.name)}</h2>${d.games} partidas · winrate ${pct(d.wr)} · pickrate ${pct(d.pick)}
+    const mu = Object.values(d.vs).filter(v => v.games >= 3).map(v => ({...v, wr: v.wins/v.games}));
+    const beats = [...mu].filter(v => v.wr > .5).sort((a,b) => b.wr-a.wr || b.games-a.games).slice(0,5);
+    const loses = [...mu].filter(v => v.wr < .5).sort((a,b) => a.wr-b.wr || b.games-a.games).slice(0,5);
+    const lv = (arr, win) => arr.length ? arr.map(v => { const s = splitName(v.name); return `<li>${esc(s.base)}${s.ver ? ` <span class="ver ${verClass(s.ver)}">${esc(s.ver)}</span>` : ''} - ${v.games} peleas, ${win ? pct(v.wr) + ' ganadas' : pct(1-v.wr) + ' perdidas'}</li>`; }).join('') : '<li style="color:var(--mu)">Todavia no hay suficientes peleas (3+ contra el mismo)</li>';
+    $('detail').innerHTML = `<div class="detail"><h2>${esc(d.base)} ${d.ver ? `<span class="ver ${verClass(d.ver)}">${esc(d.ver)}</span>` : ''}</h2>${d.games} partidas · winrate ${pct(d.wr)} · pickrate ${pct(d.pick)}
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:12px">
-      <div><b>Quienes lo mainean</b><ol>${li(mains)}</ol></div><div><b>Quienes son mejores con el</b> (5+ partidas)<ol>${li(best)}</ol></div></div>
+      <div><b>Quienes lo mainean</b><ol>${li(mains)}</ol></div><div><b>Quienes son mejores con el</b> (5+ partidas)<ol>${li(best)}</ol></div>
+      <div><b style="color:var(--gn)">Contra quienes gana mas</b> (3+ peleas)<ol>${lv(beats, true)}</ol></div><div><b style="color:var(--rd)">Contra quienes pierde mas</b> (3+ peleas)<ol>${lv(loses, false)}</ol></div></div>
       <button onclick="sel=null;render()">Cerrar</button></div>`;
   } else $('detail').innerHTML = '';
 }
@@ -126,17 +153,8 @@ dz.ondrop = e => { e.preventDefault(); dz.classList.remove('hot'); loadFiles(e.d
 $('fOnline').onclick = () => { onlyOnline = true; $('fOnline').classList.add('on'); $('fAll').classList.remove('on'); render(); };
 $('fAll').onclick = () => { onlyOnline = false; $('fAll').classList.add('on'); $('fOnline').classList.remove('on'); render(); };
 $('q').oninput = render;
+$('fVer').onchange = render;
 document.querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; sortDir = (sortK===k) ? -sortDir : (k==='name'?1:-1); sortK = k; render(); });
-$('demo').onclick = () => {
-  const chars = ['Goku','Vegeta','Naruto','Sasuke','Ichigo','Luffy','Gojo Satoru','Saitama','Deku','Tanjiro','Crono','Fairy Leviathan'];
-  const players = ['vland','Kaz','Rafa','Mili','Toño','Sora'];
-  let seed = 7; const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
-  const out = [];
-  for(let i=0;i<400;i++){ const a = chars[Math.floor(rnd()**1.4*chars.length)], b = chars[Math.floor(rnd()*chars.length)];
-    const bias = (chars.indexOf(a) - chars.indexOf(b)) * -0.02;
-    out.push({v:1,online:true,lado:1+Math.floor(rnd()*2),jugador:players[Math.floor(rnd()*players.length)],p1:[{char:a,name:a}],p2:[{char:b,name:b}],ganador: rnd() < .5+bias ? 1 : 2}); }
-  RECS = out; $('src').textContent = 'Datos de ejemplo (inventados)'; render();
-};
 async function loadServer(){
   const c = window.RF_SERVIDOR;
   if(!c || !c.url || !c.key || c.key.indexOf('PEGA') >= 0) return false;
