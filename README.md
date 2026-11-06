@@ -4,8 +4,8 @@ Juego de peleas gratuito hecho por fans, basado en Ikemen GO (con rollback). Cie
 
 ## Cómo jugar
 
-1. Descarga el lanzador: [Lanzador.RF.rar](https://github.com/landerod1947/rift-fighters/releases/download/v5/Lanzador.RF.rar)
-2. Extráelo en una carpeta con **45 GB libres** (necesitas WinRAR o 7-Zip).
+1. Descarga el lanzador: [LanzadorRF.zip](https://github.com/landerod1947/rift-fighters/releases/download/v8/LanzadorRF.zip)
+2. Extráelo en una carpeta con **45 GB libres** (Windows abre el .zip solo).
 3. Abre `RiftFighters.exe` y presiona **INSTALAR**. La primera descarga es de unos 43 GB.
 4. Cuando termine, presiona **JUGAR**. Las próximas versiones se actualizan solas desde el mismo lanzador.
 
