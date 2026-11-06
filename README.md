@@ -41,10 +41,7 @@ GOOS=darwin  GOARCH=arm64 go build -o RiftFighters_mac .
 GOOS=linux   GOARCH=amd64 go build -o RiftFighters_linux .
 ```
 
-## Publicar una version
-1. Con el juego cerrado, correr `rf_motor\publicar\publicar.bat` (o `RiftFighters_publicar.exe publicar -version N -anterior manifest_vN-1.json`).
-2. Crear una Release con el tag `vN` y subir todos los archivos de la carpeta `RF_publicar_vN` (los .zip y `manifest.json`).
-3. No borrar releases anteriores: el manifiesto nuevo reutiliza sus paquetes.
+
 
 ## Licencias
 El motor Ikemen GO es MIT (ver License.txt del juego). Los recursos de Elecbyte son CC BY-NC (no comercial).
