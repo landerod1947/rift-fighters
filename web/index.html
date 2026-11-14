@@ -42,15 +42,27 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .note{color:var(--mu);font-size:13px;margin-top:10px}
 @media (max-width:640px){h1{font-size:26px} th:nth-child(4),td:nth-child(4){display:none}}
 .mu{color:var(--mu)}
+.tabs{display:flex;gap:8px;margin:6px 0 4px}
+.tabs button{font-size:16px;padding:10px 18px}
+.tabs button.on{background:var(--cy);border-color:var(--cy);color:#04122a}
+.hide{display:none!important}
+h3{margin:26px 0 10px;font-size:18px}
+.chk{display:flex;gap:6px;align-items:center;color:var(--mu);font-size:14px;cursor:pointer}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.pill{display:inline-block;min-width:22px;text-align:center;font-size:12px;font-weight:700;padding:1px 7px;border-radius:20px;background:#1d2b5e;color:var(--cy)}
+.scroll{overflow-x:auto}
+@media (max-width:640px){#stb th:nth-child(7),#stb td:nth-child(7),#stb th:nth-child(8),#stb td:nth-child(8){display:none}}
 </style>
 </head>
 <body>
 <header>
-  <div><h1>RIFT <span>FIGHTERS</span></h1><div class="sub">Estadisticas de personajes: winrate y pickrate</div></div>
+  <div><h1>RIFT <span>FIGHTERS</span></h1><div class="sub" id="subt">Estadisticas de personajes: winrate y pickrate</div></div>
   <div class="sub" id="src">Sin datos cargados</div>
 </header>
 <main>
-  <div class="drop" id="drop">Arrastra aqui uno o varios archivos <b>rf_partidas.jsonl</b> (estan en la carpeta <b>save</b> del juego)<br>
+  <div class="tabs"><button id="tNorm" class="on">Peleas</button><button id="tSmash">Modo Smash</button></div>
+  <section id="secNorm">
+  <div class="drop" id="drop">Arrastra aqui uno o varios archivos <b>rf_partidas.jsonl</b> o <b>rf_smash.jsonl</b> (estan en la carpeta <b>save</b> del juego)<br>
     o <label class="btn">elegir archivos<input type="file" id="file" multiple accept=".jsonl,.json,.txt" hidden></label></div>
   <div class="bar">
     <button id="fOnline" class="on">Solo online</button>
@@ -66,6 +78,29 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
   </table>
   <div class="note">Winrate = peleas ganadas por equipos que llevaban al personaje. Pickrate = porcentaje de todas las elecciones de personaje.
   Los personajes con menos de 10 partidas se muestran en gris: con tan pocas peleas el numero todavia no dice mucho.</div>
+  </section>
+
+  <section id="secSmash" class="hide">
+  <div class="bar">
+    <button id="sAll" class="on">Todas</button>
+    <button id="sOnline">Solo online</button>
+    <select id="sFmt"><option value="">Todos los formatos</option><option value="ffa">Todos contra todos</option><option value="equipos">Por equipos</option></select>
+    <label class="chk"><input type="checkbox" id="sCpu"> Contar personajes de la CPU</label>
+    <input type="search" id="sq" placeholder="Buscar personaje">
+  </div>
+  <div class="kpis" id="skpis"></div>
+  <div id="sdetail"></div>
+  <div class="scroll"><table id="stb">
+    <thead><tr><th data-k="base">Personaje</th><th data-k="ver">Version</th><th data-k="games" class="num">Partidas</th><th data-k="pick">Pickrate</th><th data-k="wr">Victorias</th><th data-k="dmg" class="num">Dano / partida</th><th data-k="kos" class="num">KOs / partida</th><th data-k="falls" class="num">Caidas / partida</th></tr></thead>
+    <tbody id="stbody"></tbody>
+  </table></div>
+  <div class="note">Dano / partida = porcentaje de dano que causo en promedio en cada pelea. Victorias = peleas que gano (en todos contra todos, solo el 1er lugar cuenta como victoria).
+  Por defecto solo cuentan los personajes que jugo una persona; activa "Contar personajes de la CPU" para incluir los de la maquina.</div>
+  <div class="grid2">
+    <div><h3>Jugadores</h3><div class="scroll"><table><thead><tr><th>Jugador</th><th class="num">Partidas</th><th class="num">Victorias</th><th class="num">Dano / partida</th><th class="num">KOs / partida</th><th>Mas usa</th></tr></thead><tbody id="splayers"></tbody></table></div></div>
+    <div><h3>Escenarios</h3><table><thead><tr><th>Escenario</th><th class="num">Partidas</th><th class="num">Duracion media</th></tr></thead><tbody id="sstages"></tbody></table></div>
+  </div>
+  </section>
 </main>
 <script>
 let RECS = [], onlyOnline = true, fromServer = false, sortK = 'games', sortDir = -1, sel = null;
@@ -75,7 +110,7 @@ function keyOf(c){ return (c.char && c.char !== '?') ? c.char : c.name; }
 // "Goku Combo Mode" -> base "Goku", version "Combo"
 const VERS = ['ADC','Forms','Grappler','Counter','Combo','Heavy','Rushdown','Omega','Neo','Legacy','Classic','Arcade','Alpha'];
 function splitName(n){
-  const m = String(n||'').match(new RegExp('^(.*?)\\s+((?:[A-Za-z]+\\s+)*?(' + VERS.join('|') + '))\\s+Mode$','i'));
+  const m = String(n||'').match(new RegExp('^(.+)\\s+(' + VERS.join('|') + ')\\s+Mode$','i')); // RF 13nov: "Rock Lee ADC Mode" -> "Rock Lee" + "ADC"
   if(m) return {base: m[1].trim() || n, ver: m[2].trim()};
   return {base: String(n||'?'), ver: ''};
 }
@@ -144,7 +179,7 @@ function render(){
   } else $('detail').innerHTML = '';
 }
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-async function loadFiles(files){ let n=0; for(const f of files){ RECS = RECS.concat(parse(await f.text())); n++; } $('src').textContent = RECS.length + ' partidas de ' + n + ' archivo(s)'; render(); }
+async function loadFiles(files){ let n=0; for(const f of files){ for(const r of parse(await f.text())){ if(Array.isArray(r.jugadores) && r.formato) SM.push(r); else RECS.push(r); } n++; } renderSmash(); $('src').textContent = RECS.length + ' partidas de ' + n + ' archivo(s)'; render(); }
 $('file').onchange = e => loadFiles(e.target.files);
 const dz = $('drop');
 dz.ondragover = e => { e.preventDefault(); dz.classList.add('hot'); };
@@ -154,7 +189,7 @@ $('fOnline').onclick = () => { onlyOnline = true; $('fOnline').classList.add('on
 $('fAll').onclick = () => { onlyOnline = false; $('fAll').classList.add('on'); $('fOnline').classList.remove('on'); render(); };
 $('q').oninput = render;
 $('fVer').onchange = render;
-document.querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; sortDir = (sortK===k) ? -sortDir : (k==='name'?1:-1); sortK = k; render(); });
+document.querySelectorAll('#secNorm th').forEach(th => th.onclick = () => { const k = th.dataset.k; sortDir = (sortK===k) ? -sortDir : (k==='name'?1:-1); sortK = k; render(); });
 async function loadServer(){
   const c = window.RF_SERVIDOR;
   if(!c || !c.url || !c.key || c.key.indexOf('PEGA') >= 0) return false;
@@ -171,8 +206,107 @@ async function loadServer(){
     render(); return true;
   } catch(e) { $('src').textContent = 'No se pudo leer el servidor (' + e.message + ')'; return false; }
 }
+/* ======================= MODO SMASH ======================= */
+let SM = [], sOnline = false, sSortK = 'games', sSortDir = -1, sSel = null;
+const num = (x, d=1) => (isFinite(x) ? x : 0).toFixed(d);
+function smashCompute(){
+  const fmt = $('sFmt').value, cpu = $('sCpu').checked;
+  const recs = SM.filter(r => (!sOnline || r.online) && (!fmt || r.formato === fmt));
+  const ch = {}, pl = {}, st = {}; let picks = 0, dmgSum = 0, dmgN = 0;
+  for(const r of recs){
+    const s = st[r.escenario||'?'] || (st[r.escenario||'?'] = {name:r.escenario||'?', games:0, secs:0}); s.games++; s.secs += r.duracion||0;
+    for(const j of (r.jugadores||[])){
+      if(!cpu && !j.humano) continue;
+      const k = (j.char && j.char !== '?') ? j.char : j.nombre; picks++;
+      const sn = splitName(j.nombre||k);
+      const o = ch[k] || (ch[k] = {key:k, name:j.nombre||k, base:sn.base, ver:sn.ver, games:0, wins:0, dmgT:0, recT:0, kosT:0, fallsT:0, sdT:0, placeT:0, players:{}, stages:{}});
+      o.games++; if(j.gano) o.wins++; o.dmgT += j.dano||0; o.recT += j.recibido||0; o.kosT += j.kos||0; o.fallsT += j.caidas||0; o.sdT += j.sd||0; o.placeT += j.lugar||0;
+      dmgSum += j.dano||0; dmgN++;
+      const sg = o.stages[r.escenario||'?'] || (o.stages[r.escenario||'?'] = {g:0,w:0}); sg.g++; if(j.gano) sg.w++;
+      if(j.humano && j.jugador){
+        const p = o.players[j.jugador] || (o.players[j.jugador] = {games:0, wins:0, dmg:0, kos:0}); p.games++; if(j.gano) p.wins++; p.dmg += j.dano||0; p.kos += j.kos||0;
+        const q = pl[j.jugador] || (pl[j.jugador] = {n:j.jugador, games:0, wins:0, dmg:0, kos:0, chars:{}}); q.games++; if(j.gano) q.wins++; q.dmg += j.dano||0; q.kos += j.kos||0;
+        q.chars[sn.base + (sn.ver ? ' ' + sn.ver : '')] = (q.chars[sn.base + (sn.ver ? ' ' + sn.ver : '')]||0) + 1;
+      }
+    }
+  }
+  const list = Object.values(ch).map(o => ({...o, wr:o.wins/o.games, pick: picks ? o.games/picks : 0, dmg:o.dmgT/o.games, rec:o.recT/o.games, kos:o.kosT/o.games, falls:o.fallsT/o.games, sd:o.sdT/o.games, place:o.placeT/o.games}));
+  return {recs, list, players:Object.values(pl), stages:Object.values(st), avgDmg: dmgN ? dmgSum/dmgN : 0};
+}
+function renderSmash(){
+  const {recs, list, players, stages, avgDmg} = smashCompute();
+  const q = $('sq').value.trim().toLowerCase();
+  const top = [...list].sort((a,b) => b.games-a.games)[0];
+  const killer = [...list].filter(o => o.games >= 3).sort((a,b) => b.dmg-a.dmg)[0];
+  $('skpis').innerHTML = [
+    ['Partidas Smash', recs.length], ['Jugadores', players.length || '-'], ['Mas elegido', top ? esc(top.base) : '-'],
+    ['Dano medio por partida', recs.length ? num(avgDmg,0) + '%' : '-'], ['Mas dano por partida (3+)', killer ? esc(killer.base) + ' · ' + num(killer.dmg,0) + '%' : '-']
+  ].map(([a,b]) => `<div class="kpi"><b>${b}</b><span>${a}</span></div>`).join('');
+  const rows = list.filter(o => !q || o.name.toLowerCase().includes(q) || o.key.toLowerCase().includes(q))
+    .sort((a,b) => { const x=a[sSortK], y=b[sSortK]; return (typeof x==='string' ? x.localeCompare(y) : x-y) * sSortDir; });
+  const maxDmg = Math.max(1, ...list.map(o => o.dmg));
+  $('stbody').innerHTML = rows.map(o => {
+    const few = o.games < 10;
+    return `<tr class="srow row" data-k="${encodeURIComponent(o.key)}" style="${few?'opacity:.55':''}"><td>${esc(o.base)}</td><td>${o.ver ? `<span class="ver ${verClass(o.ver)}">${esc(o.ver)}</span>` : '<span class="mu">-</span>'}</td><td class="num">${o.games}</td>
+      <td><div class="meter"><i style="width:${Math.min(100,o.pick*100*8)}%;background:var(--cy)"></i></div> ${pct(o.pick)}</td>
+      <td><div class="meter"><i style="width:${o.wr*100}%;background:var(--or)"></i></div> ${pct(o.wr)}</td>
+      <td class="num"><div class="meter"><i style="width:${o.dmg/maxDmg*100}%;background:var(--rd)"></i></div> ${num(o.dmg,0)}%</td>
+      <td class="num">${num(o.kos)}</td><td class="num">${num(o.falls)}</td></tr>`;
+  }).join('') || `<tr><td colspan="8" class="mu">Todavia no hay partidas del Modo Smash${sOnline ? ' online' : ''}. Se suben solas al terminar cada pelea Smash (version 28 o mas nueva).</td></tr>`;
+  document.querySelectorAll('tr.srow').forEach(tr => tr.onclick = () => { sSel = decodeURIComponent(tr.dataset.k); renderSmash(); window.scrollTo({top:0,behavior:'smooth'}); });
+  $('splayers').innerHTML = players.sort((a,b) => b.games-a.games).slice(0,30).map(p => {
+    const fav = Object.entries(p.chars).sort((a,b) => b[1]-a[1])[0];
+    return `<tr><td>${esc(p.n)}</td><td class="num">${p.games}</td><td class="num">${pct(p.wins/p.games)}</td><td class="num">${num(p.dmg/p.games,0)}%</td><td class="num">${num(p.kos/p.games)}</td><td>${fav ? esc(fav[0]) + ' <span class="pill">' + fav[1] + '</span>' : '-'}</td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="mu">Sin jugadores todavia</td></tr>';
+  $('sstages').innerHTML = stages.sort((a,b) => b.games-a.games).map(s => `<tr><td>${esc(s.name)}</td><td class="num">${s.games}</td><td class="num">${Math.floor(s.secs/s.games/60)}:${String(Math.round(s.secs/s.games%60)).padStart(2,'0')}</td></tr>`).join('') || '<tr><td colspan="3" class="mu">-</td></tr>';
+  const d = sSel && list.find(o => o.key === sSel);
+  if(d){
+    const ps = Object.entries(d.players).map(([n,p]) => ({n, ...p, wr:p.wins/p.games}));
+    const mains = [...ps].sort((a,b) => b.games-a.games).slice(0,5);
+    const best = ps.filter(p => p.games >= 3).sort((a,b) => b.wr-a.wr || b.dmg/b.games-a.dmg/a.games).slice(0,5);
+    const li = arr => arr.length ? arr.map(p => `<li>${esc(p.n)} - ${p.games} partidas, ${pct(p.wr)} victorias, ${num(p.dmg/p.games,0)}% de dano</li>`).join('') : '<li class="mu">Sin datos de jugadores todavia</li>';
+    const sts = Object.entries(d.stages).map(([n,v]) => ({n, ...v})).sort((a,b) => b.g-a.g).slice(0,5);
+    $('sdetail').innerHTML = `<div class="detail"><h2>${esc(d.base)} ${d.ver ? `<span class="ver ${verClass(d.ver)}">${esc(d.ver)}</span>` : ''}</h2>${d.games} partidas · ${pct(d.wr)} victorias · pickrate ${pct(d.pick)}
+      <div class="kpis" style="margin-top:12px">
+        <div class="kpi"><b>${num(d.dmg,0)}%</b><span>Dano causado por partida</span></div>
+        <div class="kpi"><b>${num(d.rec,0)}%</b><span>Dano recibido por partida</span></div>
+        <div class="kpi"><b>${num(d.kos)}</b><span>KOs por partida</span></div>
+        <div class="kpi"><b>${num(d.falls)}</b><span>Caidas por partida</span></div>
+        <div class="kpi"><b>${num(d.sd,2)}</b><span>Autodestrucciones por partida</span></div>
+        <div class="kpi"><b>${num(d.place)}</b><span>Lugar promedio</span></div>
+      </div>
+      <div class="grid2"><div><b>Quienes lo juegan</b><ol>${li(mains)}</ol></div><div><b>Quienes son mejores con el</b> (3+ partidas)<ol>${li(best)}</ol></div>
+      <div><b>Donde lo juegan</b><ol>${sts.map(s => `<li>${esc(s.n)} - ${s.g} partidas, ${pct(s.w/s.g)} victorias</li>`).join('')}</ol></div></div>
+      <button onclick="sSel=null;renderSmash()">Cerrar</button></div>`;
+  } else $('sdetail').innerHTML = '';
+}
+$('sAll').onclick = () => { sOnline = false; $('sAll').classList.add('on'); $('sOnline').classList.remove('on'); renderSmash(); };
+$('sOnline').onclick = () => { sOnline = true; $('sOnline').classList.add('on'); $('sAll').classList.remove('on'); renderSmash(); };
+$('sFmt').onchange = renderSmash; $('sCpu').onchange = renderSmash; $('sq').oninput = renderSmash;
+document.querySelectorAll('#stb th').forEach(th => th.onclick = e => { e.stopPropagation(); const k = th.dataset.k; sSortDir = (sSortK===k) ? -sSortDir : (k==='base'||k==='ver'?1:-1); sSortK = k; renderSmash(); });
+function tab(smash){
+  $('secNorm').classList.toggle('hide', smash); $('secSmash').classList.toggle('hide', !smash);
+  $('tNorm').classList.toggle('on', !smash); $('tSmash').classList.toggle('on', smash);
+  $('subt').textContent = smash ? 'Modo Smash: dano por partida, KOs y quien juega cada personaje' : 'Estadisticas de personajes: winrate y pickrate';
+  try { localStorage.setItem('rf_tab', smash ? 's' : 'n'); } catch(e) {}
+  if(smash) renderSmash();
+}
+$('tNorm').onclick = () => tab(false); $('tSmash').onclick = () => tab(true);
+try { if(localStorage.getItem('rf_tab') === 's' || location.hash === '#smash') tab(true); } catch(e) {}
+async function loadSmash(){
+  const c = window.RF_SERVIDOR;
+  if(!c || !c.url || !c.key || c.key.indexOf('PEGA') >= 0) return;
+  try {
+    const r = await fetch(c.url.replace(/\/$/,'') + '/rest/v1/smash_publicas?select=*&order=fecha.desc&limit=20000', {headers:{apikey:c.key, Authorization:'Bearer '+c.key}});
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    SM = await r.json();
+    renderSmash();
+  } catch(e) { $('skpis').innerHTML = '<div class="kpi"><b>-</b><span>No se pudieron leer las partidas Smash (' + esc(e.message) + ')</span></div>'; }
+}
+
 render();
 loadServer().then(ok => { if(ok) setInterval(loadServer, 60000); });
+loadSmash(); setInterval(loadSmash, 60000);
 </script>
 </body>
 </html>
